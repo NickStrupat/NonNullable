@@ -35,7 +35,7 @@ public class ModuleWeaver {
 		if (method.IsConstructor) {
 			if (method.IsStatic) {
 				var staticMembers = method.DeclaringType.Fields.Where(x => x.IsStatic && this.IsNonNullable(x)).ToArray();
-				var referenced = method.Body.Instructions.Any(x => (x.OpCode == OpCodes.Stsfld || x.OpCode == OpCodes.Ldsfld || x.OpCode == OpCodes.Ldsflda) && ((MethodReference)x.Operand). );
+				//var referenced = method.Body.Instructions.Any(x => (x.OpCode == OpCodes.Stsfld || x.OpCode == OpCodes.Ldsfld || x.OpCode == OpCodes.Ldsflda) && ((MethodReference)x.Operand).);
 			}
 			else {
 				var members = method.DeclaringType.Fields.Where(x => !x.IsStatic && this.IsNonNullable(x)).ToArray();
@@ -124,7 +124,7 @@ public class ModuleWeaver {
 			i = i.Previous;
 		if (i.SequencePoint == null)
 			return "No source line information available. Symbols required for source line.";
-		return $"Source: {i.SequencePoint.Document.Url} - line {i.SequencePoint.StartLine}";
+		return $"Source: {i.SequencePoint.Document.Url}:line {i.SequencePoint.StartLine}";
 	}
 }
 
