@@ -21,19 +21,27 @@ public class ModuleWeaver {
 	}
 
 	public void Execute() {
-		this.nntr = this.ModuleDefinition.ImportReference(NonNullableTypeInfo);
+		this.nntr = this.ModuleDefinition.ImportReference(typeof(NonNullable<>));
 		var allMethods = ModuleDefinition.GetTypes().SelectMany(x => x.Methods.Where(y => y.HasBody)).ToArray();
 		foreach (var method in allMethods)
 			ProcessMethod(method);
 	}
 
 	private TypeReference nntr;
-	private static readonly Type NonNullableTypeInfo = typeof(NonNullable<>);
 
 	private void ProcessMethod(MethodDefinition method) {
-		//var nnci = this.ModuleDefinition.ImportReference(NonNullableTypeInfo.GetConstructor())
-		
-		var vars = method.Body.Variables.Where(IsNonNullable).Select(x => new VarMapping(x)).ToArray();
+		// Find obvious mistakes
+		// - Uninitialized NonNullable<T> locals, instance members, static members
+		if (method.IsConstructor) {
+			if (method.IsStatic) {
+				var staticMembers = method.DeclaringType.Fields.Where(x => x.IsStatic && this.IsNonNullable(x)).ToArray();
+				var referenced = method.Body.Instructions.Any(x => (x.OpCode == OpCodes.Stsfld || x.OpCode == OpCodes.Ldsfld || x.OpCode == OpCodes.Ldsflda) && ((MethodReference)x.Operand). );
+			}
+			else {
+				var members = method.DeclaringType.Fields.Where(x => !x.IsStatic && this.IsNonNullable(x)).ToArray();
+			}
+		}
+		var vars = method.Body.Variables.Where(this.IsNonNullable).Select(x => new VarMapping(x)).ToArray();
 		foreach (var instruction in method.Body.Instructions) {
 			if (instruction.OpCode == OpCodes.Ldloca || instruction.OpCode == OpCodes.Ldloca_S) {
 				var var = vars.Single(x => x.Var == instruction.Operand);
@@ -45,9 +53,7 @@ public class ModuleWeaver {
 						continue;
 					case null:
 						var call = instruction.Next?.Next;
-						if (call?.OpCode != OpCodes.Call)
-							var.Initialized = false;
-						else {
+						if (call?.OpCode == OpCodes.Call) {
 							var mr = (MethodReference) call.Operand;
 							var t = ((GenericInstanceType) mr.DeclaringType).GenericArguments.SingleOrDefault();
 							var nngit = this.nntr.MakeGenericInstanceType(t);
@@ -55,16 +61,28 @@ public class ModuleWeaver {
 							var isPassingNull = call.Previous.OpCode == OpCodes.Ldnull;
 							var.Initialized = isCallingTheNonNullableMainConstructor && !isPassingNull;
 						}
+						//else if (call?.OpCode == OpCodes.Newobj) {
+							
+						//}
+						else {
+							var.Initialized = false;
+							var.Instruction = method.Body.Instructions.First();
+						}
 						break;
 				}
 			}
 		}
-		foreach (var var in vars) {
+		for (var i = 0; i < vars.Length; i++) {
+			var var = vars[i];
 			if (var.Initialized != true) {
 				var.Instruction = var.Instruction ?? method.Body.Instructions.First();
 				throw GetNotSupportedException(var);
 			}
 		}
+
+		// 
+
+
 		////var asdf = new GenericInstanceType(new TypeReference("NonNullable", "NonNullable", ModuleDefinition.));
 		//foreach (var instruction in method.Body.Instructions) {
 		//	if (instruction.OpCode == OpCodes.Initobj) {
@@ -81,6 +99,15 @@ public class ModuleWeaver {
 
 	private Boolean IsNonNullable(VariableDefinition variableDefinition) {
 		var git = variableDefinition.VariableType as GenericInstanceType;
+		if (git == null || git.GenericArguments.Count != 1)
+			return false;
+		var nngit = this.nntr.MakeGenericInstanceType(git.GenericArguments.Single());
+		return git.FullName == nngit.FullName;
+	}
+
+	private Boolean IsNonNullable(FieldDefinition variableDefinition) {
+		//return variableDefinition.Resolve().FullName == nntr.FullName;
+		var git = variableDefinition.FieldType as GenericInstanceType;
 		if (git == null || git.GenericArguments.Count != 1)
 			return false;
 		var nngit = this.nntr.MakeGenericInstanceType(git.GenericArguments.Single());

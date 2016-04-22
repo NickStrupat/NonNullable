@@ -2,7 +2,10 @@
 using System;
 
 namespace AssemblyToProcess {
-	public static class ClassToProcess {
+	public class ClassToProcess {
+		private static NonNullable<String> sm = new NonNullable<String>("");
+		private NonNullable<String> m = new NonNullable<String>("");  
+
 		public static void What() {
 			//NonNullable<String> z;
 			var a = new NonNullable<String>("");
